@@ -12,6 +12,10 @@ require 'json_message'
 require 'services/api'
 require 'services/api/const'
 
+require "uaa/token_coder"
+require "uaa/token_issuer"
+require 'digest/sha1'
+
 $:.unshift(File.dirname(__FILE__))
 require 'service_error'
 
@@ -44,8 +48,8 @@ class VCAP::Services::AsynchronousServiceGateway < Sinatra::Base
     missing_opts = REQ_OPTS.select {|o| !opts.has_key? o}
     raise ArgumentError, "Missing options: #{missing_opts.join(', ')}" unless missing_opts.empty?
     @service      = opts[:service]
-    @token        = opts[:token]
     @logger       = opts[:logger] || make_logger()
+    @logger.info("Setting up service gateway")
     @cld_ctrl_uri = http_uri(opts[:cloud_controller_uri])
     @offering_uri = "#{@cld_ctrl_uri}/services/v1/offerings"
     @provisioner  = opts[:provisioner]
@@ -68,6 +72,14 @@ class VCAP::Services::AsynchronousServiceGateway < Sinatra::Base
       :acls => @service[:acls],
       :timeout => @service[:timeout],
     }.to_json
+
+    client_id = opts[:client_id]
+    client_secret = opts[:client_secret]
+    @token_issuer = CF::UAA::TokenIssuer.new(opts[:uaa_url]||'http://uaa.vcap.me', client_id, client_secret, "read write")
+    # TODO: refresh token when it expires...
+    @token        = opts[:token] || "#{@token_issuer.client_credentials_grant.auth_header}"
+
+    @logger.info("Token: #{@token}")
 
     @deact_json   = {
       :label  => @service[:label],
@@ -133,7 +145,7 @@ class VCAP::Services::AsynchronousServiceGateway < Sinatra::Base
       error_msg = ServiceError.new(ServiceError::INVALID_CONTENT).to_hash
       abort_request(error_msg)
     end
-    unless auth_token && (auth_token == @token)
+    unless auth_token && (auth_token == @token || auth_token == Digest::SHA1.hexdigest(@token))
       error_msg = ServiceError.new(ServiceError::NOT_AUTHORIZED).to_hash
       abort_request(error_msg)
     end
@@ -473,6 +485,8 @@ class VCAP::Services::AsynchronousServiceGateway < Sinatra::Base
 
     def auth_token
       @auth_token ||= request_header(VCAP::Services::Api::GATEWAY_TOKEN_HEADER)
+      @auth_token ||= request_header('Authorization')
+      @logger.debug("Auth token: #{@auth_token}")
       @auth_token
     end
 

@@ -1,5 +1,7 @@
 source "http://rubygems.org"
 
+gem 'cf-uaa-client', '~> 0.0.10', :git => 'git://github.com/cloudfoundry/uaa.git', :ref => '0000f736'
+
 gemspec
 
 group :test do

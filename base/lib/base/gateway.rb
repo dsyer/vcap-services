@@ -110,6 +110,8 @@ class VCAP::Services::Base::Gateway
              :proxy   => @config[:proxy],
              :service => @config[:service],
              :token   => @config[:token],
+             :client_id => @config[:client_id],
+             :client_secret => @config[:client_secret],
              :logger  => @config[:logger],
              :provisioner => sp,
              :node_timeout => node_timeout,
@@ -131,9 +133,11 @@ class VCAP::Services::Base::Gateway
     config = VCAP.symbolize_keys(config)
 
     token = config[:token]
-    raise "Token missing" unless token
-    raise "Token must be a String or Int, #{token.class} given" unless (token.is_a?(Integer) || token.is_a?(String))
-    config[:token] = token.to_s
+    raise "Token missing and no client id specified" unless token or config[:client_id]
+    if token
+      raise "Token must be a String or Int, #{token.class} given" unless (token.is_a?(Integer) || token.is_a?(String))
+      config[:token] = token.to_s
+    end
 
     config
   end
